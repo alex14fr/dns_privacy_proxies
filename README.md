@@ -35,6 +35,6 @@ chmod 0600 /var/dnstls_proxy/*
 ```
 - Compile with make
 - Run with ./dnstls_proxy
-
+- Set 127.0.0.1 as your nameserver
 
 
