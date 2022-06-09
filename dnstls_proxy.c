@@ -82,12 +82,25 @@ static sqlite3_stmt *insertStmt;
 static sqlite3_stmt *queryStmt;
 static sqlite3_stmt *incHitStmt;
 
+static void hexdump_pr(char *s, int len) {
+	for(int i=0;i<16-len;i++) printf("   ");
+	printf("   | ");
+	for(int i=0;i<len;i++)
+		if(s[i]>32 && s[i]<127)
+			printf("%c",s[i]);
+		else
+			printf(".");
+	printf("\n");
+}
+
 static void hexdump(char *s, int len) {
 	for(int i=0;i<len;i++) {
-		if(i>0 && (i%16==0)) printf("\n");
+		if(i>0 && (i%16==0)) {
+			hexdump_pr(s+i-16,16);
+		}
 		printf("%02hhx ",s[i]);
 	}
-	puts("");
+	hexdump_pr(s+len-(len%16 == 0 ? 16 : len%16),(len%16 == 0 ? 16 : len%16));
 }
 
 static void tlsconnect(void) {
@@ -148,6 +161,7 @@ static void cache_search(char *inpacket, int psize, char *answer, int *answersz)
 }
 
 static void cache_save(char *inpacket, int psize, char *answer, int answersz) {
+	if(answersz<=0) { printf("cache_save : won't save null answer\n"); return; }
 	if(sqlite3_bind_blob(insertStmt,1,inpacket+12,psize-12,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 1 : %s\n",sqlite3_errmsg(db)); } 
 	if(sqlite3_bind_blob(insertStmt,2,answer,answersz,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 2 : %s\n",sqlite3_errmsg(db)); } 
 	int rc=sqlite3_step(insertStmt);
@@ -157,11 +171,12 @@ static void cache_save(char *inpacket, int psize, char *answer, int answersz) {
 
 static int tlswrite(char *s, int slen) {
 	if(!ctx) tlsconnect();
-	int rc=tls_write(ctx,s,slen);
-	if(rc<0) { 
+	b: int rc=tls_write(ctx,s,slen);
+	if(rc==TLS_WANT_POLLIN || rc==TLS_WANT_POLLOUT) goto b;
+	if(rc==-1) { 
 		printf("tlswrite():reconnect\n");
 		tlsconnect(); 
-		if(tls_write(ctx,s,slen)<0) { tlserr("tls_write"); return(1); } 
+		goto b;
 	}
 	return(0);
 }
@@ -173,13 +188,14 @@ static int upstream_query(char *inpacket, int psize, char *answer, unsigned int 
 	*answersz=snprintf(answer,1024,"POST " DOH_PATH " HTTP/1.1\r\nhost:" UPSTREAM_SRVNAME "\r\ncontent-type:application/dns-message\r\naccept:*/*\r\ncontent-length:%d\r\n\r\n",(int)psize);
 	memcpy(answer+*answersz, inpacket, psize);
 	*answersz+=psize;
-	if(tlswrite(answer, *answersz)==1) return(1);
-	*answersz=tls_read(ctx,answer,1024);
-	if(*answersz<0) { printf("tls_read()=%d\n",*answersz); tlserr("tls_read"); return(1); }
-	printf("> "); for(int i=0;i<12;i++) printf("%c", answer[i]); puts("");
+	b: if(tlswrite(answer, *answersz)==1) return(1);
+	c: *answersz=tls_read(ctx,answer,1024);
+	if(*answersz==TLS_WANT_POLLIN || *answersz==TLS_WANT_POLLOUT) goto c;
+	if(*answersz<=0) { printf("tls_read()=%d\n",*answersz); tlserr("tls_read"); tlsconnect(); goto b; }
+	printf("> (*answersz=%d) ",*answersz); for(int i=0;i<12;i++) printf("%c", answer[i]); puts("");
 	if(strstr(answer,"HTTP/1.1 200")!=answer) { printf("bad http response status "); return(1); }
 	for(i=0;i<*answersz-4 && (answer[i]!='\r' || answer[i+1]!='\n' || answer[i+2]!='\r' || answer[i+3]!='\n');i++);
-	if(i==*answersz-4) { puts("error parsing http response"); return(1); }
+	if(i==*answersz-4) { puts("error parsing http response : "); hexdump(answer,*answersz); return(1); }
 	i+=4;
 	printf("DNS response message found at %d :\n",i);
 	hexdump(answer+i,*answersz-i); 
@@ -193,9 +209,10 @@ static int upstream_query(char *inpacket, int psize, char *answer, unsigned int 
 	inpacket[0]=(psize>>8)%256;
 	inpacket[1]=psize%256;
 	b: if(tlswrite(inpacket, psize+2)==1) return(1);
-	*answersz=tls_read(ctx,answer,1024);
+	c: *answersz=tls_read(ctx,answer,1024);
+	if(*answersz==TLS_WANT_POLLIN || *answersz==TLS_WANT_POLLOUT) goto c;
 	if(*answersz<=0) { printf("tls_read()=%d\n",*answersz); tlserr("tls_read"); tlsconnect(); goto b; }
-	printf("DNS response :\n"); hexdump(answer+2,*answersz-2);
+	printf("DNS response (*answersz=%d):\n",*answersz); hexdump(answer,2); hexdump(answer+2,*answersz-2);
 	return(0);
 }
 #endif

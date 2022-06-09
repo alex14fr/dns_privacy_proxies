@@ -28,13 +28,13 @@
 //    CFLR_DOT    1.1.1.1 (Cloudflare), DNS over TLS
 //    CFLR_DOH    1.1.1.1 (Cloudflare), DNS over HTTPS
 // Preferer DNS over TLS if your network configuration allow TCP connections to port 853.
-//#define GOOG_DOT
+#define CFLR_DOT
 
 // Customized upstream:
-//  #define IS_DOH   								// for DNS over HTTPS, leave undefined for DNS over TLS
-  #define UPSTREAM_HOST "9.9.9.9:853"			// host IP:port as a string
-  #define UPSTREAM_SRVNAME "dns.quad9.net"  	// server subject name for certificate validation
-//  #define DOH_PATH "/dns-query"				// path to use for DNS over HTTPS (leave undefined for DNS over TLS)
+//#define IS_DOH   								// for DNS over HTTPS, leave undefined for DNS over TLS
+//#define UPSTREAM_HOST "54.39.15.77:853"			// host IP:port as a string
+//#define UPSTREAM_SRVNAME "dns.anondns.org"  	// server subject name for certificate validation
+//#define DOH_PATH "/dns-query"				// path to use for DNS over HTTPS (leave undefined for DNS over TLS)
 
 
 
