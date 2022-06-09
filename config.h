@@ -32,7 +32,7 @@
 //    CFLR_DOH    1.1.1.1 (Cloudflare), DNS over HTTPS
 // Preferer DNS over TLS if your network configuration allow TCP connections to port 853.
 // To define your own upstream parameters, comment the following line and see below.
-#define CFLR_DOT
+#define GOOG_DOT
 
 // Customized upstream:
 //  #define IS_DOH   								// for DNS over HTTPS, leave undefined for DNS over TLS

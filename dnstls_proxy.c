@@ -1,3 +1,33 @@
+/* dnstls_proxy - Simple stub resolver for DoTLS/DoHTTPS upstream servers.
+ * *
+ * * BSD 2-Clause License
+ * *
+ * * Copyright (c) 2022, Alexandre Janon <alex14fr@gmail.com>
+ * * All rights reserved.
+ * *
+ * * Redistribution and use in source and binary forms, with or without
+ * * modification, are permitted provided that the following conditions are met:
+ * *
+ * * 1. Redistributions of source code must retain the above copyright notice, this
+ * * list of conditions and the following disclaimer.
+ * *
+ * * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * * this list of conditions and the following disclaimer in the documentation
+ * * and/or other materials provided with the distribution.
+ * *
+ * * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * *
+ * */
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <string.h>
@@ -45,13 +75,14 @@
 
 
 
-char *dbErr=0;
-sqlite3 *db;
-sqlite3_stmt *insertStmt;
-sqlite3_stmt *queryStmt;
-sqlite3_stmt *incHitStmt;
+static struct tls_config *config;
+static struct tls *ctx;
+static sqlite3 *db;
+static sqlite3_stmt *insertStmt;
+static sqlite3_stmt *queryStmt;
+static sqlite3_stmt *incHitStmt;
 
-void hexdump(char *s, int len) {
+static void hexdump(char *s, int len) {
 	for(int i=0;i<len;i++) {
 		if(i>0 && (i%16==0)) printf("\n");
 		printf("%02hhx ",s[i]);
@@ -59,12 +90,19 @@ void hexdump(char *s, int len) {
 	puts("");
 }
 
-void tlsconnect(struct tls *ctx) {
+static void tlsconnect(void) {
+	if(ctx) {
+		tls_close(ctx);
+		tls_free(ctx);
+	}
+	ctx=tls_client();
+	dieunless(ctx,"tls_client()");
+	if(tls_configure(ctx, config)) { tlsfatal("tls_configure"); }
 	puts("Connecting to " UPSTREAM_HOST);
 	if(tls_connect_servername(ctx, UPSTREAM_HOST, NULL, UPSTREAM_SRVNAME)) { tlserr("tls_connect"); }
 }
 
-void cache_init(void) {
+static void cache_init(void) {
 	if(sqlite3_open(CACHEDB, &db)) {
 		printf("error opening database %s : %s\n",CACHEDB,sqlite3_errmsg(db));
 	}
@@ -83,7 +121,7 @@ void cache_init(void) {
 	}
 }
 
-void cache_search(char *inpacket, int psize, char *answer, int *answersz) {
+static void cache_search(char *inpacket, int psize, char *answer, int *answersz) {
 	*answersz=0;
 	if(sqlite3_bind_blob(queryStmt,1,inpacket+12,psize-12,SQLITE_TRANSIENT)) { printf("error binding param : %s\n",sqlite3_errmsg(db)); } 
 	int rc;
@@ -107,7 +145,7 @@ void cache_search(char *inpacket, int psize, char *answer, int *answersz) {
 	sqlite3_reset(queryStmt);
 }
 
-void cache_save(char *inpacket, int psize, char *answer, int answersz) {
+static void cache_save(char *inpacket, int psize, char *answer, int answersz) {
 	if(sqlite3_bind_blob(insertStmt,1,inpacket+12,psize-12,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 1 : %s\n",sqlite3_errmsg(db)); } 
 	if(sqlite3_bind_blob(insertStmt,2,answer,answersz,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 2 : %s\n",sqlite3_errmsg(db)); } 
 	int rc=sqlite3_step(insertStmt);
@@ -115,10 +153,12 @@ void cache_save(char *inpacket, int psize, char *answer, int answersz) {
 	sqlite3_reset(insertStmt);
 }
 
-int tlswrite(struct tls *ctx, char *s, int slen) {
-	if(tls_write(ctx,s,slen)<0) { 
-		tlsconnect(ctx); 
-		if(tls_handshake(ctx)<0) { printf("error during TLS handshake"); return(1); }
+static int tlswrite(char *s, int slen) {
+	if(!ctx) tlsconnect();
+	int rc=tls_write(ctx,s,slen);
+	if(rc<0) { 
+		printf("tlswrite():reconnect\n");
+		tlsconnect(); 
 		printf("cert hash: %s\ncert subj: %s\ncert issuer: %s\n", tls_peer_cert_hash(ctx), tls_peer_cert_subject(ctx), tls_peer_cert_issuer(ctx));
 		if(tls_write(ctx,s,slen)<0) { tlserr("tls_write"); return(1); } 
 	}
@@ -126,12 +166,13 @@ int tlswrite(struct tls *ctx, char *s, int slen) {
 }
 
 #ifdef IS_DOH 
-int upstream_query(struct tls *ctx, char *inpacket, int psize, char *answer, unsigned int *answersz) {
+#define PKT_OFF 0
+static int upstream_query(char *inpacket, int psize, char *answer, unsigned int *answersz) {
 	int i, j;
 	*answersz=snprintf(answer,1024,"POST " DOH_PATH " HTTP/1.1\r\nhost:" UPSTREAM_SRVNAME "\r\ncontent-type:application/dns-message\r\naccept:*/*\r\ncontent-length:%d\r\n\r\n",(int)psize);
 	memcpy(answer+*answersz, inpacket, psize);
 	*answersz+=psize;
-	if(tlswrite(ctx, answer, *answersz)==1) return(1);
+	if(tlswrite(answer, *answersz)==1) return(1);
 	*answersz=tls_read(ctx,answer,1024);
 	if(*answersz<0) { printf("tls_read()=%d\n",*answersz); tlserr("tls_read"); return(1); }
 	printf("> "); for(int i=0;i<12;i++) printf("%c", answer[i]); puts("");
@@ -146,17 +187,14 @@ int upstream_query(struct tls *ctx, char *inpacket, int psize, char *answer, uns
 	return(0);
 }
 #else /* IS_DOT */
-int upstream_query(struct tls *ctx, char *inpacket, int psize, char *answer, unsigned int *answersz) {
-	char x[2];
-	x[0]=(psize>>8)%256;
-	x[1]=psize%256;
-	if(tlswrite(ctx, x, 2)==1) return(1);
-	if(tlswrite(ctx, inpacket, psize)==1) return(1);
+#define PKT_OFF 2
+static int upstream_query(char *inpacket, int psize, char *answer, unsigned int *answersz) {
+	inpacket[0]=(psize>>8)%256;
+	inpacket[1]=psize%256;
+	b: if(tlswrite(inpacket, psize+2)==1) return(1);
 	*answersz=tls_read(ctx,answer,1024);
-	if(*answersz<0) { printf("tls_read()=%d\n",*answersz); tlserr("tls_read"); return(1); }
-	for(int j=0;j<*answersz-2;j++) answer[j]=answer[j+2];
-	*answersz-=2;
-	printf("> "); hexdump(answer,*answersz);
+	if(*answersz<=0) { printf("tls_read()=%d\n",*answersz); tlserr("tls_read"); tlsconnect(); goto b; }
+	printf("DNS response:"); hexdump(answer+2,*answersz-2);
 	return(0);
 }
 #endif
@@ -164,8 +202,6 @@ int upstream_query(struct tls *ctx, char *inpacket, int psize, char *answer, uns
 int main(int argc, char **argv) {
 	struct sockaddr_in addr, cl_addr;
 	char inpacket[512];
-	struct tls_config *config;
-	struct tls *ctx;
 	ssize_t psize;
 	char answer[1024];
 	unsigned int answersz;
@@ -178,27 +214,25 @@ int main(int argc, char **argv) {
 	addr.sin_port=htons(53);
 	if(bind(s,(struct sockaddr *)&addr,sizeof(struct sockaddr_in))<0) { perror("bind"); exit(1); }
 	chroot(CHROOTPATH);
+	chdir("/");
 	setuid(DROP_UID);
 	setgid(DROP_GID);
 	config=tls_config_new();
 	tls_config_set_ca_file(config,CADB); 
-	ctx=tls_client();
-	dieunless(ctx,"tls_client()");
-	if(tls_configure(ctx, config)) { tlsfatal("tls_configure"); }
 	cache_init();
-	while((psize=recvfrom(s,inpacket,512,0,(struct sockaddr *)&cl_addr,&claddrsz))>0) {
-		puts("> "); hexdump(inpacket,psize); 
-		cache_search(inpacket,psize,cacheAnsw,&cacheAnswSz);
+	while((psize=recvfrom(s,inpacket+PKT_OFF,512-PKT_OFF,0,(struct sockaddr *)&cl_addr,&claddrsz))>0) {
+		puts("Got request :"); hexdump(inpacket,psize); 
+		cache_search(inpacket+PKT_OFF,psize-PKT_OFF,cacheAnsw,&cacheAnswSz);
 		if(cacheAnswSz>0) {
-			printf("in main:\n"); hexdump(cacheAnsw,cacheAnswSz);
+			puts("Response :"); hexdump(cacheAnsw,cacheAnswSz);
 			sendto(s,cacheAnsw,cacheAnswSz,0,(struct sockaddr*)&cl_addr,claddrsz);
 		} else {
-			if(upstream_query(ctx, inpacket, psize, answer, &answersz)==1) {
+			if(upstream_query(inpacket, psize, answer, &answersz)==1) {
 				printf("upstream_query()==1\n");
 				continue;
 			}
-			cache_save(inpacket,psize,answer,answersz);
-			sendto(s,answer,answersz,0,(struct sockaddr*)&cl_addr,claddrsz);
+			cache_save(inpacket+PKT_OFF,psize-PKT_OFF,answer+PKT_OFF,answersz-PKT_OFF);
+			sendto(s,answer+PKT_OFF,answersz-PKT_OFF,0,(struct sockaddr*)&cl_addr,claddrsz);
 		}
 	}
 }
