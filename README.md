@@ -27,13 +27,12 @@ Simple stub resolver for DoTLS/DoHTTPS upstream servers
 - Edit config.h file
 - Create the daemon chroot directory, for instance, as root:
 ``` 
+umask 077
 mkdir /var/dnstls_proxy
 chown nobody:nobody /var/dnstls_proxy
-chmod 0700 /var/dnstls_proxy
 cp /etc/ssl/cert.pem /var/dnstls_proxy/
 cat schema.txt | sqlite3 /var/dnstls_proxy/cache
 chown nobody:nobody /var/dnstls_proxy/*
-chmod 0600 /var/dnstls_proxy/*   
 ```
 - Compile with make
 - Run with ./dnstls_proxy

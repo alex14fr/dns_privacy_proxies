@@ -74,7 +74,7 @@
 
 
 
-
+int sessionFd;
 static struct tls_config *config;
 static struct tls *ctx;
 static sqlite3 *db;
@@ -117,6 +117,7 @@ static void tlsconnect(void) {
 	if(tls_connect_servername(ctx, UPSTREAM_HOST, NULL, UPSTREAM_SRVNAME)) { tlserr("tls_connect"); }
 	tls_handshake(ctx);
 	printf("TLS ver : %s\ncipher : %s\ncert hash: %s\ncert subj: %s\ncert issuer: %s\n", tls_conn_version(ctx), tls_conn_cipher(ctx), tls_peer_cert_hash(ctx), tls_peer_cert_subject(ctx), tls_peer_cert_issuer(ctx));
+	if(tls_conn_session_resumed(ctx)==1) { printf("TLS session resumed\n"); }
 }
 
 static void cache_init(void) {
@@ -240,8 +241,10 @@ int main(int argc, char **argv) {
 	chdir("/");
 	setuid(DROP_UID);
 	setgid(DROP_GID);
+	sessionFd=open("tls_session",O_CREAT|O_RDWR,0600);
 	config=tls_config_new();
 	tls_config_set_ca_file(config,CADB); 
+	tls_config_set_session_fd(config,sessionFd);
 	cache_init();
 	while((psize=recvfrom(s,inpacket+PKT_OFF,512-PKT_OFF,0,(struct sockaddr *)&cl_addr,&claddrsz))>0) {
 		puts("Got request :"); hexdump(inpacket+PKT_OFF,psize-PKT_OFF); 
