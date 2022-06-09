@@ -36,5 +36,10 @@ chmod 0600 /var/dnstls_proxy/*
 - Compile with make
 - Run with ./dnstls_proxy
 - Set 127.0.0.1 as your nameserver
+- To clean the cache, run for instance
+```
+echo 'delete from doh_cache where timestamp<unixepoch()-3600;'|sqlite3 /var/dnstls_proxy/cache
+```
+to clean the cache entries created more than 1 hour ago.
 
 

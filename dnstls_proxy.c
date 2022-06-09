@@ -106,7 +106,7 @@ static void cache_init(void) {
 	if(sqlite3_open(CACHEDB, &db)) {
 		printf("error opening database %s : %s\n",CACHEDB,sqlite3_errmsg(db));
 	}
-#define stmt1 "INSERT INTO doh_cache (question,answer,timestamp,hit_count) VALUES (?,?,datetime(),1)"
+#define stmt1 "INSERT INTO doh_cache (question,answer,timestamp,hit_count) VALUES (?,?,strftime('%s'),1)"
 #define stmt2 "SELECT question,answer,hit_count FROM doh_cache WHERE question=?"
 #define stmt3 "UPDATE doh_cache SET hit_count=? where question=?"
 
