@@ -29,7 +29,7 @@ mkdir /var/dnstls_proxy
 chown nobody:nobody /var/dnstls_proxy
 chmod 0700 /var/dnstls_proxy
 cp /etc/ssl/cert.pem /var/dnstls_proxy/
-echo 'CREATE TABLE doh_cache(question BLOB, answer BLOB, timestamp INTEGER, hit_count integer);CREATE INDEX i1 on doh_cache (question);CREATE INDEX i2 on doh_cache (timestamp);|sqlite3 /var/dnstls_proxy/cache
+cat schema.txt | sqlite3 /var/dnstls_proxy/cache
 chown nobody:nobody /var/dnstls_proxy/*
 chmod 0600 /var/dnstls_proxy/*   
 ```
@@ -38,7 +38,7 @@ chmod 0600 /var/dnstls_proxy/*
 - Set 127.0.0.1 as your nameserver
 - To clean the cache, run for instance
 ```
-echo 'delete from doh_cache where timestamp<unixepoch()-3600;'|sqlite3 /var/dnstls_proxy/cache
+echo 'delete from doh_cache where timestamp<unixepoch()-3600;' | sqlite3 /var/dnstls_proxy/cache
 ```
 to clean the cache entries created more than 1 hour ago.
 

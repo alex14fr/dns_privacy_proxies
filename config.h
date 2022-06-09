@@ -16,10 +16,7 @@
 #define CHROOTPATH "/var/dnstls_proxy"
 
 // Path (relative to CHROOTPATH) containing the cache SQLite database
-// Schema:
-// CREATE TABLE doh_cache(question BLOB, answer BLOB, timestamp INTEGER, hit_count integer);
-// CREATE INDEX i1 on doh_cache (question);
-// CREATE INDEX i2 on doh_cache (timestamp);
+// See schema.txt for DB schema.
 #define CACHEDB "/cache"
 
 // Path of the CA certificate database; usually a copy of /etc/ssl/cert.pem
