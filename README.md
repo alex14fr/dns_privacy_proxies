@@ -42,4 +42,10 @@ echo 'delete from doh_cache where timestamp<unixepoch()-3600;' | sqlite3 /var/dn
 ```
 to clean the cache entries created more than 1 hour ago.
 
+## References
+
+- RFC1035: Domain names - implementation and specification <https://datatracker.ietf.org/doc/html/rfc1035> 
+- RFC7858: Specification for DNS over Transport Layer Security (TLS)  <https://datatracker.ietf.org/doc/html/rfc7858>
+- RFC8484: DNS queries over HTTPS (DoH) <https://datatracker.ietf.org/doc/html/rfc8484>
+
 
