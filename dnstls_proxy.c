@@ -100,6 +100,8 @@ static void tlsconnect(void) {
 	if(tls_configure(ctx, config)) { tlsfatal("tls_configure"); }
 	puts("Connecting to " UPSTREAM_HOST);
 	if(tls_connect_servername(ctx, UPSTREAM_HOST, NULL, UPSTREAM_SRVNAME)) { tlserr("tls_connect"); }
+	tls_handshake(ctx);
+	printf("TLS ver : %s\ncipher : %s\ncert hash: %s\ncert subj: %s\ncert issuer: %s\n", tls_conn_version(ctx), tls_conn_cipher(ctx), tls_peer_cert_hash(ctx), tls_peer_cert_subject(ctx), tls_peer_cert_issuer(ctx));
 }
 
 static void cache_init(void) {
@@ -159,7 +161,6 @@ static int tlswrite(char *s, int slen) {
 	if(rc<0) { 
 		printf("tlswrite():reconnect\n");
 		tlsconnect(); 
-		printf("cert hash: %s\ncert subj: %s\ncert issuer: %s\n", tls_peer_cert_hash(ctx), tls_peer_cert_subject(ctx), tls_peer_cert_issuer(ctx));
 		if(tls_write(ctx,s,slen)<0) { tlserr("tls_write"); return(1); } 
 	}
 	return(0);
@@ -180,7 +181,7 @@ static int upstream_query(char *inpacket, int psize, char *answer, unsigned int 
 	for(i=0;i<*answersz-4 && (answer[i]!='\r' || answer[i+1]!='\n' || answer[i+2]!='\r' || answer[i+3]!='\n');i++);
 	if(i==*answersz-4) { puts("error parsing http response"); return(1); }
 	i+=4;
-	printf("DNS response message found at %d\n",i);
+	printf("DNS response message found at %d :\n",i);
 	hexdump(answer+i,*answersz-i); 
 	for(j=0;j<*answersz-i;j++) answer[j]=answer[i+j];
 	*answersz-=i;
@@ -194,7 +195,7 @@ static int upstream_query(char *inpacket, int psize, char *answer, unsigned int 
 	b: if(tlswrite(inpacket, psize+2)==1) return(1);
 	*answersz=tls_read(ctx,answer,1024);
 	if(*answersz<=0) { printf("tls_read()=%d\n",*answersz); tlserr("tls_read"); tlsconnect(); goto b; }
-	printf("DNS response:"); hexdump(answer+2,*answersz-2);
+	printf("DNS response :\n"); hexdump(answer+2,*answersz-2);
 	return(0);
 }
 #endif
@@ -221,7 +222,7 @@ int main(int argc, char **argv) {
 	tls_config_set_ca_file(config,CADB); 
 	cache_init();
 	while((psize=recvfrom(s,inpacket+PKT_OFF,512-PKT_OFF,0,(struct sockaddr *)&cl_addr,&claddrsz))>0) {
-		puts("Got request :"); hexdump(inpacket,psize); 
+		puts("Got request :"); hexdump(inpacket+PKT_OFF,psize-PKT_OFF); 
 		cache_search(inpacket+PKT_OFF,psize-PKT_OFF,cacheAnsw,&cacheAnswSz);
 		if(cacheAnswSz>0) {
 			puts("Response :"); hexdump(cacheAnsw,cacheAnswSz);
