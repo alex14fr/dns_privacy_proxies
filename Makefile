@@ -7,6 +7,8 @@ BINS=dnstls_proxy
 
 all: $(BINS)
 
+dnstls_proxy: dnstls_proxy.c config.h
+
 clean:
 	rm -f $(BINS)
 

@@ -13,19 +13,8 @@
 #define tlsfatal(s) { printf(s ": %s\n", (tls_error(ctx)?:"no error")); exit(1); }
 #define dieunless(x,s) if(!x) { puts("!" s); exit(1); }
 
-#define LISTEN_ADDR INADDR_LOOPBACK
-#define LOCAL_PORT 53
-#define DROP_UID 65534
-#define DROP_GID 65534
+#include "config.h"
 
-// CREATE TABLE doh_cache(question BLOB, answer BLOB, timestamp INTEGER, hit_count integer);
-// CREATE INDEX i1 on doh_cache (question);
-// CREATE INDEX i2 on doh_cache (timestamp);
-#define CHROOTPATH "/var/dnstls_proxy"
-#define CACHEDB "/cache"
-#define CADB "/cert.pem"
-
-#define GOOG_DOT
 
 #ifdef GOOG_DOH
 #define IS_DOH
