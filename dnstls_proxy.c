@@ -80,7 +80,9 @@ static struct tls *ctx;
 static sqlite3 *db;
 static sqlite3_stmt *insertStmt;
 static sqlite3_stmt *queryStmt;
+#ifdef CACHEDB_KEEP_HIT_COUNT
 static sqlite3_stmt *incHitStmt;
+#endif
 
 static void hexdump_pr(char *s, int len) {
 	for(int i=0;i<16-len;i++) printf("   ");
@@ -121,19 +123,22 @@ static void cache_init(void) {
 	if(sqlite3_open(CACHEDB, &db)) {
 		printf("error opening database %s : %s\n",CACHEDB,sqlite3_errmsg(db));
 	}
-#define stmt1 "INSERT INTO doh_cache (question,answer,timestamp,hit_count) VALUES (?,?,strftime('%s'),1)"
-#define stmt2 "SELECT question,answer,hit_count FROM doh_cache WHERE question=?"
-#define stmt3 "UPDATE doh_cache SET hit_count=? where question=?"
-
+#define stmt1 "INSERT INTO doh_cache (question,answer,timestamp) VALUES (?,?,unixepoch())"
+#define stmt2 "SELECT answer FROM doh_cache WHERE question=?"
 	if(sqlite3_prepare_v2(db,stmt1,strlen(stmt1),&insertStmt,NULL)) {
 		printf("error preparing stmt : %s\n",sqlite3_errmsg(db));
 	}
 	if(sqlite3_prepare_v2(db,stmt2,strlen(stmt2),&queryStmt,NULL)) {
 		printf("error preparing stmt : %s\n",sqlite3_errmsg(db));
 	}
+#ifdef CACHEDB_KEEP_HIT_COUNT
+#undef stmt1
+#define stmt1 "INSERT INTO doh_cache (question,answer,timestamp,hit_count) VALUES (?,?,unixepoch(),1)"
+#define stmt3 "UPDATE doh_cache SET hit_count=hit_count+1 where question=?"
 	if(sqlite3_prepare_v2(db,stmt3,strlen(stmt3),&incHitStmt,NULL)) {
 		printf("error preparing stmt : %s\n",sqlite3_errmsg(db));
 	}
+#endif
 }
 
 static void cache_search(char *inpacket, int psize, char *answer, int *answersz) {
@@ -144,16 +149,16 @@ static void cache_search(char *inpacket, int psize, char *answer, int *answersz)
 	if(rc==SQLITE_DONE) { printf("cache: miss\n"); sqlite3_reset(queryStmt); return; }
 	else if(rc==SQLITE_ROW) {
 		printf("cache: hit\n");
-		*answersz=sqlite3_column_bytes(queryStmt, 1);
-		memcpy(answer,sqlite3_column_blob(queryStmt, 1),*answersz);
+		*answersz=sqlite3_column_bytes(queryStmt, 0);
+		memcpy(answer,sqlite3_column_blob(queryStmt, 0),*answersz);
 		answer[0]=inpacket[0];
 		answer[1]=inpacket[1];
-		int hitCnt=sqlite3_column_int(queryStmt, 2)+1;
-		if(sqlite3_bind_int(incHitStmt, 1, hitCnt)) { printf("cache_search : error binding param 1 : %s\n",sqlite3_errmsg(db)); }
-		if(sqlite3_bind_blob(incHitStmt, 2, inpacket+12, psize-12, SQLITE_TRANSIENT)) { printf("cache_search : error binding param 2 : %s\n",sqlite3_errmsg(db)); }
+#ifdef CACHEDB_KEEP_HIT_COUNT
+		if(sqlite3_bind_blob(incHitStmt, 1, inpacket+12, psize-12, SQLITE_TRANSIENT)) { printf("cache_search : error binding param : %s\n",sqlite3_errmsg(db)); }
 		rc=sqlite3_step(incHitStmt);
 		if(rc!=SQLITE_DONE) { printf("cache_search : error during sqlite3_step (rc=%d) : %s\n", rc, sqlite3_errmsg(db)); }
 		sqlite3_reset(incHitStmt);
+#endif
 	} else {
 		printf("error during sqlite3_step : %s\n", sqlite3_errmsg(db));
 	}

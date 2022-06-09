@@ -12,6 +12,8 @@ Simple stub resolver for DoTLS/DoHTTPS upstream servers
 
 - Cache never expires (by design; you can however use a simple SQLite query to clean up stale cache entries when you want to)
 - Only queries with one question are correctly handled
+- Queries and answers must fit in one datagram
+- Queries are processed sequentially
 - DoH is HTTP/1.1-only
 
 ## Dependencies

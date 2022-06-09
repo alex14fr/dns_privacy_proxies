@@ -19,6 +19,9 @@
 // See schema.txt for DB schema.
 #define CACHEDB "/cache"
 
+// Keep the hit count on each cache entry, leave undef to save a write to the DB at each request
+//#define CACHEDB_KEEP_HIT_COUNT
+
 // Path of the CA certificate database; usually a copy of /etc/ssl/cert.pem
 #define CADB "/cert.pem"
 
