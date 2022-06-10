@@ -31,7 +31,7 @@
 #define UPSTREAM_HOST "51.158.166.97"			// host IP as a string
 #define UPSTREAM_PORT 443
 #define UPSTREAM_SRVNAME "\1" "2\xd" "dnscrypt-cert\xc" "acsacsar-ams\x3" "com\0"  	// provider name in DNS format
-#define UPSTREAM_PUBKEY "0327f3cf927e995f46fb2381e07c1c764ef25f5d8442ce48bdaee4577a06b651"	// long-term server pubkey
+#define UPSTREAM_PUBKEY "0327f3cf927e995f46fb2381e07c1c764ef25f5d8442ce48bdaee4577a06b651"	// long-term server pubkey (leave empty for no verification)
 #define UPSTREAM_UDP
 #endif
 

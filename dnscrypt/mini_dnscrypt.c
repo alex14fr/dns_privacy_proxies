@@ -244,15 +244,18 @@ static int get_sinfo(void) {
 	unsigned char longtermPk[32];
 	size_t binlen;
 	sodium_hex2bin(longtermPk, 32, UPSTREAM_PUBKEY, strlen(UPSTREAM_PUBKEY), NULL, &binlen, NULL);
-#ifdef DUMP_KEYS
-	printf("Server longterm PK : \n"); hexdump(longtermPk,32);
-#endif
-	int rc=crypto_sign_ed25519_verify_detached(signature, tosign, tosignlen, longtermPk);
-	if(rc!=0) {
-		printf("Upstream certificate verification failed\n");
-		return(2);
+	int rc;
+	if(binlen>0) {
+		rc=crypto_sign_ed25519_verify_detached(signature, tosign, tosignlen, longtermPk);
+		if(rc!=0) {
+			printf("Upstream certificate verification failed\n");
+			printf("Provided public key : \n"); hexdump(longtermPk,32);
+			return(2);
+		} else {
+			printf("Upstream certificate matches provided longterm public key\n");
+		}
 	} else {
-		printf("Upstream certificate matches provided longterm public key\n");
+		printf("No longterm public key provided, skipping certificate validation\n");
 	}
 
 	crypto_box_curve25519xchacha20poly1305_keypair(clientPk, clientSk);
@@ -368,7 +371,7 @@ int main(int argc, char **argv) {
 	chdir("/");
 	setuid(DROP_UID);
 	setgid(DROP_GID);
-	printf("Fetching initial upstream certificate from %s://%s:%d (pubkey=%s)... \n", (PKT_OFF==0 ? "udp" : "tcp"), UPSTREAM_HOST, UPSTREAM_PORT, UPSTREAM_PUBKEY);
+	printf("Fetching initial upstream certificate from %s://%s:%d... \n", (PKT_OFF==0 ? "udp" : "tcp"), UPSTREAM_HOST, UPSTREAM_PORT);
 	int retry_in=5;
 	a: 
 	retry_in+=retry_in/4;
