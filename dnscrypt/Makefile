@@ -7,7 +7,7 @@ BINS=mini_dnscrypt
 
 all: $(BINS)
 
-dnstls_proxy: mini_dnscrypt.c config.h
+mini_dnscrypt: mini_dnscrypt.c config.h
 
 clean:
 	rm -f $(BINS)

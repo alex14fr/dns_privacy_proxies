@@ -200,17 +200,27 @@ static int get_sinfo(void) {
 	memcpy(qry+12, UPSTREAM_SRVNAME, strlen(UPSTREAM_SRVNAME));
 	qry[12+strlen(UPSTREAM_SRVNAME)+2]='\x10';
 	qry[12+strlen(UPSTREAM_SRVNAME)+4]='\x01';
+	sinfo_len=0;
 	rtrip_upstream(qry, 12+strlen(UPSTREAM_SRVNAME)+5, sinfoBuf, &sinfo_len);
+	if(sinfo_len==0) {
+		printf("Error reading server info from upstream\n");
+		return(1);
+	}
 	sinfo=memmem(sinfoBuf,sinfo_len,"DNSC",4);
 	if(sinfo==NULL) {
 		printf("cert-magic not found");
-		return(1);
+		return(2);
 	}
 	sinfo_resolverPk=sinfo+72;
 	sinfo_clientMagic=sinfo+104;
 
-	printf("ES-version : \n"); hexdump(sinfo+4,2);
-	printf("Protocol-minor-version : \n"); hexdump(sinfo+6,2);
+	if(sinfo[4]==0 && sinfo[5]==2) {
+		printf("Crypto suite : Ed25519-X25519-XChacha20-Poly1305\n"); 
+	} else {
+		printf("Unsupported crypto suite %d\n", (sinfo[4]<<8)+sinfo[5]);
+		return(2);
+	}
+//	printf("Protocol-minor-version : \n"); hexdump(sinfo+6,2);
 	uint32_t serial=sinfo[115]+(sinfo[114]<<8)+(sinfo[113]<<16)+(sinfo[112]<<24);
 	printf("Serial : %d\n", serial); //hexdump(sinfo+112,4);
 	time_t tsstart=sinfo[119]+(sinfo[118]<<8)+(sinfo[117]<<16)+(sinfo[116]<<24);
@@ -218,6 +228,11 @@ static int get_sinfo(void) {
 	time_t tsend=sinfo[123]+(sinfo[122]<<8)+(sinfo[121]<<16)+(sinfo[120]<<24);
 	printf("TS-end : %s", asctime(gmtime(&tsend))); //hexdump(sinfo+120,4);
 	sinfo_tsend=(uint32_t)tsend;
+	time_t now=time(NULL);
+	if(now<tsstart || now>tsend) {
+		printf("Warning : certificate not yet valid or expired\n");
+	}
+
 #ifdef DUMP_KEYS
 	printf("Client magic : \n"); hexdump(sinfo_clientMagic,8);
 	printf("Resolver PK : \n"); hexdump(sinfo_resolverPk,32);
@@ -235,7 +250,7 @@ static int get_sinfo(void) {
 	int rc=crypto_sign_ed25519_verify_detached(signature, tosign, tosignlen, longtermPk);
 	if(rc!=0) {
 		printf("Upstream certificate verification failed\n");
-		exit(1);
+		return(2);
 	} else {
 		printf("Upstream certificate matches provided longterm public key\n");
 	}
@@ -248,13 +263,13 @@ static int get_sinfo(void) {
 	rc=crypto_box_curve25519xchacha20poly1305_beforenm(sharedK, sinfo_resolverPk, clientSk);
 	if(rc!=0) {
 		printf("Error during shared key derivation\n");
-		exit(1);
+		return(2);
 	}
 #ifdef DUMP_KEYS
 	printf("Shared key : \n"); hexdump(sharedK,32);
 #endif
 
-	sinfo_ts=time(NULL);
+	sinfo_ts=now;
 
 	return(0);
 }
@@ -353,7 +368,19 @@ int main(int argc, char **argv) {
 	chdir("/");
 	setuid(DROP_UID);
 	setgid(DROP_GID);
-	get_sinfo();
+	printf("Fetching initial upstream certificate from %s://%s:%d (pubkey=%s)... \n", (PKT_OFF==0 ? "udp" : "tcp"), UPSTREAM_HOST, UPSTREAM_PORT, UPSTREAM_PUBKEY);
+	int retry_in=5;
+	a: 
+	retry_in+=retry_in/4;
+	int rc=get_sinfo();
+	if(rc==1) {
+		printf("Error fetching initial upstream certificate, retrying in %d secs...\n", retry_in);
+		sleep(retry_in);
+		goto a;
+	} else if(rc==2) {
+		printf("Fatal error during initial upstream certificate fetch. \n");
+		exit(1);
+	}
 	cache_init();
 	printf("Listening for requests on udp://%s:%d...\n", inet_ntoa(addr.sin_addr), LOCAL_PORT);
 	while((psize=recvfrom(s,inpacket+PKT_OFF,512-PKT_OFF,0,(struct sockaddr *)&cl_addr,&claddrsz))>0) {

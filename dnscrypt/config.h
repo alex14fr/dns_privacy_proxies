@@ -23,15 +23,26 @@
 //#define CACHEDB_KEEP_HIT_COUNT
 
 // Upstream configuration; available presets, or see below to set your custom parameters.
-//#define QUAD9_DOT
+// See <https://github.com/DNSCrypt/dnscrypt-resolvers/blob/master/v2/public-resolvers.md> for a list of sdns:// adresses
+// and <https://dnscrypt.info/stamps/> to convert the sdns:// stamp into suitable parameters.
+#define UPSTREAM_SCALEWAY_PAR
 
-// Customized upstream:
-//#define IS_DOH   								// for DNS over HTTPS, leave undefined for DNS over TLS
+#ifdef UPSTREAM_ACSACSAR_AMS   // hosted in Amsterdam, run by acsacsar
 #define UPSTREAM_HOST "51.158.166.97"			// host IP as a string
 #define UPSTREAM_PORT 443
 #define UPSTREAM_SRVNAME "\1" "2\xd" "dnscrypt-cert\xc" "acsacsar-ams\x3" "com\0"  	// provider name in DNS format
 #define UPSTREAM_PUBKEY "0327f3cf927e995f46fb2381e07c1c764ef25f5d8442ce48bdaee4577a06b651"	// long-term server pubkey
 #define UPSTREAM_UDP
+#endif
+
+#ifdef UPSTREAM_SCALEWAY_PAR  // hosted in Paris, run by Frank Denis, hosted by scaleway
+#define UPSTREAM_HOST "212.47.228.136"
+#define UPSTREAM_PORT 443
+#define UPSTREAM_SRVNAME "\1" "2\xd" "dnscrypt-cert\x2" "fr\x8" "dnscrypt\x3" "org\0"
+#define UPSTREAM_PUBKEY "e801b84ea606bfb0bac0ce43445bb15eba64b02fa3c4aa31ae10636a0790324d"
+#define UPSTREAM_UDP
+#endif
+
 #define TIMEOUT_SECS 2   // timeout in seconds for upstream answer
 
 // Debug options
