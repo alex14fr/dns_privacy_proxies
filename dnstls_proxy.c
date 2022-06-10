@@ -72,6 +72,17 @@
 #define UPSTREAM_SRVNAME "cloudflare-dns.com"
 #endif
 
+#ifdef QUAD9_DOT
+#define IS_DOT
+#define UPSTREAM_HOST "9.9.9.9:853"
+#define UPSTREAM_SRVNAME "dns.quad9.net"
+#endif
+
+#ifdef QUAD9_DOH
+#define IS_DOH
+#define UPSTREAM_HOST "9.9.9.9:443"
+#define UPSTREAM_SRVNAME "dns.quad9.net"
+#endif
 
 
 int sessionFd;
@@ -235,7 +246,7 @@ int main(int argc, char **argv) {
 	int cacheAnswSz;
 	addr.sin_family=AF_INET;
 	addr.sin_addr.s_addr=htonl(LISTEN_ADDR);
-	addr.sin_port=htons(53);
+	addr.sin_port=htons(LOCAL_PORT);
 	if(bind(s,(struct sockaddr *)&addr,sizeof(struct sockaddr_in))<0) { perror("bind"); exit(1); }
 	chroot(CHROOTPATH);
 	chdir("/");

@@ -1,4 +1,4 @@
-// Configuration file for dnstls_proxy
+// Configuration file for mini_dnscrypt
 // Edit as you need and recompile with make.
 //
 
@@ -22,22 +22,22 @@
 // Keep the hit count on each cache entry, leave undef to save a write to the DB at each request
 //#define CACHEDB_KEEP_HIT_COUNT
 
-// Path of the CA certificate database; usually a copy of /etc/ssl/cert.pem
-#define CADB "/cert.pem"
-
 // Upstream configuration; available presets, or see below to set your custom parameters.
-//    GOOG_DOT    8.8.8.8 (Google), DNS over TLS
-//    GOOG_DOH    8.8.8.8 (Google), DNS over HTTPS
-//    CFLR_DOT    1.1.1.1 (Cloudflare), DNS over TLS
-//    CFLR_DOH    1.1.1.1 (Cloudflare), DNS over HTTPS
-// Preferer DNS over TLS if your network configuration allow TCP connections to port 853.
-#define QUAD9_DOT
+//#define QUAD9_DOT
 
 // Customized upstream:
 //#define IS_DOH   								// for DNS over HTTPS, leave undefined for DNS over TLS
-//#define UPSTREAM_HOST "54.39.15.77:853"			// host IP:port as a string
-//#define UPSTREAM_SRVNAME "dns.anondns.org"  	// server subject name for certificate validation
-//#define DOH_PATH "/dns-query"				// path to use for DNS over HTTPS (leave undefined for DNS over TLS)
+#define UPSTREAM_HOST "51.158.166.97"			// host IP as a string
+#define UPSTREAM_PORT 443
+#define UPSTREAM_SRVNAME "\1" "2\xd" "dnscrypt-cert\xc" "acsacsar-ams\x3" "com\0"  	// provider name in DNS format
+#define UPSTREAM_PUBKEY "0327f3cf927e995f46fb2381e07c1c764ef25f5d8442ce48bdaee4577a06b651"	// long-term server pubkey
+#define UPSTREAM_UDP
+#define TIMEOUT_SECS 2   // timeout in seconds for upstream answer
 
-
-
+// Debug options
+// #define DUMP_RTRIP     // show hexdump of the packets sent and received to/from upstream
+// #define DUMP_KEYS		  // show server and client keys and crypto details (nonces, paddings)
+// #define DUMP_CLEAR	  // show clear queries and answers
+// #define DUMP_CACHE	  // dump cache hits and misses
+// #define DUMP_LOCAL	  // dump downstream packets 
+//
