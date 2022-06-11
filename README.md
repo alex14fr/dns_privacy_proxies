@@ -10,7 +10,7 @@ Simple stub resolvers for DoTLS/DoHTTPS/DNSCrypt upstream servers
 
 ## Limitations
 
-- Cache never expires (by design; you can however use a simple SQLite query to clean up stale cache entries when you want to, and insert fake cache entries to run a liar server)
+- Cache never expires (by design; you can however use a simple SQLite query to clean up stale cache entries when you want to, and insert fake cache entries to run a filtering server or to add a private zone)
 - Only queries with one question are correctly handled
 - Queries and answers must fit in one datagram
 - Queries are processed sequentially

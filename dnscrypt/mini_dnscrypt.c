@@ -238,7 +238,7 @@ static int get_sinfo(void) {
 	unsigned char qry[512];
 	bzero(qry,512);
 	unsigned char* qryptr=qry+UP_PKT_OFF;
-	qryptr[0]='\x55'; qryptr[1]='\xaa';
+	randombytes_buf(qryptr,2);
 	qryptr[2]=qryptr[5]='\x01'; 
 	memcpy(qryptr+12, UPSTREAM_SRVNAME, strlen(UPSTREAM_SRVNAME));
 	qryptr[12+strlen(UPSTREAM_SRVNAME)+2]='\x10';
@@ -253,6 +253,9 @@ static int get_sinfo(void) {
 	if(sinfo==NULL) {
 		printf("cert-magic not found");
 		return(2);
+	}
+	if(memmem(sinfo+4,sinfo_len-(sinfo-sinfoBuf)-4,"DNSC",4)!=NULL) {
+		printf("Warning: FIXME : multiple certificates found, using the first presented\n");
 	}
 	sinfo_resolverPk=sinfo+72;
 	sinfo_clientMagic=sinfo+104;
