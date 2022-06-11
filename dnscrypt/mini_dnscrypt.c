@@ -30,6 +30,9 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#ifndef UPSTREAM_UDP
+#include <netinet/tcp.h>
+#endif
 #include <arpa/inet.h>
 #include <string.h>
 #include <stdio.h>
@@ -143,10 +146,17 @@ static void cache_save(unsigned char *inpacket, int psize, unsigned char *answer
 	sqlite3_reset(insertStmt);
 }
 
-#ifdef UPSTREAM_UDP
 #define PKT_OFF 0
 
-static int upstreamsock;
+#ifdef UPSTREAM_UDP
+#define PROTO "udp"
+#define UP_PKT_OFF 0
+#else
+#define PROTO "tcp"
+#define UP_PKT_OFF 2
+#endif
+
+//static int upstreamsock;
 static struct sockaddr_in upstreamaddr;
 static int sinfo_ts;
 static unsigned char sinfoBuf[512];
@@ -159,50 +169,83 @@ static unsigned char clientPk[32], clientSk[32];
 static unsigned char sharedK[32];
 
 
-static int rtrip_upstream(unsigned char *in, int insize, unsigned char *out, int *outsize) {
+static int rtrip_upstream(unsigned char *in, int insize, unsigned char *out, int *outsize, int length_be) {
 	int rc;
-	if(!upstreamsock)
-		upstreamsock=socket(AF_INET,SOCK_DGRAM,0);
-	if(!upstreamaddr.sin_addr.s_addr) {
-		upstreamaddr.sin_family=AF_INET;
-		upstreamaddr.sin_addr.s_addr=inet_addr(UPSTREAM_HOST);
-		upstreamaddr.sin_port=htons(UPSTREAM_PORT);
+	int upstreamsock;
+#ifdef UPSTREAM_UDP
+	upstreamsock=socket(AF_INET,SOCK_DGRAM,0);
+#else
+	upstreamsock=socket(AF_INET,SOCK_STREAM,0);
+	int one[1]={1};
+	setsockopt(upstreamsock, IPPROTO_TCP, TCP_NODELAY, (void*)one, sizeof(int)); 
+	if(!length_be) {
+		in[1]=insize>>8;
+		in[0]=insize%256;
+	} else {
+		in[1]=insize%256;
+		in[0]=insize>>8;
 	}
+	insize+=2;
+#endif
 #ifdef DUMP_RTRIP
 	printf("Sending :\n"); hexdump(in, insize);
 #endif
-	if((rc=sendto(upstreamsock, in, insize, 0, (struct sockaddr*)&upstreamaddr, sizeof(struct sockaddr_in)))<0) {
-		perror("sendto");
-		return(rc);
-	}
-	socklen_t claddrsz=sizeof(struct sockaddr_in);
 	alarm(TIMEOUT_SECS);
 	signal(SIGALRM,timeout);
 	if(sigsetjmp(env, 1)==0) {
-		*outsize=recvfrom(upstreamsock, out, 512, 0, (struct sockaddr*)&upstreamaddr, &claddrsz);
+		if((rc=connect(upstreamsock, (struct sockaddr*)&upstreamaddr, sizeof(struct sockaddr_in)))<0) {
+			perror("connect");
+			alarm(0);
+			close(upstreamsock);
+			return(-rc);
+		}
+		if((rc=write(upstreamsock, in, insize))<0) {
+			perror("write");
+			alarm(0);
+			close(upstreamsock);
+			return(-rc);
+		}
+#ifdef UPSTREAM_UDP
+		*outsize=read(upstreamsock, out, 512);
+#else
+		unsigned char length[2]; ssize_t lengthInt;
+		*outsize=read(upstreamsock, length, 2);
+		if(*outsize>0) {
+			if(length_be) lengthInt=(length[0]<<8)+length[1];
+			else lengthInt=(length[1]<<8)+length[0];
+			*outsize=read(upstreamsock, out, lengthInt);
+		}
+#endif
 		alarm(0);
-		if(*outsize<0) { perror("recvfrom"); return(*outsize); }
+		close(upstreamsock);
+		if(*outsize<0) { 
+			perror("read"); 
+			return(- *outsize); 
+		}
 #ifdef DUMP_RTRIP
 		printf("Received :\n"); hexdump(out, *outsize);
 #endif
 		return(0);
 	} else {
 		alarm(0);
+		close(upstreamsock);
 		return(1);
 	}
 }
 
 static int get_sinfo(void) {
+	int rc;
 	unsigned char qry[512];
 	bzero(qry,512);
-	qry[0]='\x55'; qry[1]='\xaa';
-	qry[2]=qry[5]='\x01'; 
-	memcpy(qry+12, UPSTREAM_SRVNAME, strlen(UPSTREAM_SRVNAME));
-	qry[12+strlen(UPSTREAM_SRVNAME)+2]='\x10';
-	qry[12+strlen(UPSTREAM_SRVNAME)+4]='\x01';
+	unsigned char* qryptr=qry+UP_PKT_OFF;
+	qryptr[0]='\x55'; qryptr[1]='\xaa';
+	qryptr[2]=qryptr[5]='\x01'; 
+	memcpy(qryptr+12, UPSTREAM_SRVNAME, strlen(UPSTREAM_SRVNAME));
+	qryptr[12+strlen(UPSTREAM_SRVNAME)+2]='\x10';
+	qryptr[12+strlen(UPSTREAM_SRVNAME)+4]='\x01';
 	sinfo_len=0;
-	rtrip_upstream(qry, 12+strlen(UPSTREAM_SRVNAME)+5, sinfoBuf, &sinfo_len);
-	if(sinfo_len==0) {
+	rc=rtrip_upstream(qry, 12+strlen(UPSTREAM_SRVNAME)+5, sinfoBuf, &sinfo_len, 1);
+	if(rc!=0 || sinfo_len==0 || sinfo_len==UP_PKT_OFF) {
 		printf("Error reading server info from upstream\n");
 		return(1);
 	}
@@ -244,7 +287,6 @@ static int get_sinfo(void) {
 	unsigned char longtermPk[32];
 	size_t binlen;
 	sodium_hex2bin(longtermPk, 32, UPSTREAM_PUBKEY, strlen(UPSTREAM_PUBKEY), NULL, &binlen, NULL);
-	int rc;
 	if(binlen>0) {
 		rc=crypto_sign_ed25519_verify_detached(signature, tosign, tosignlen, longtermPk);
 		if(rc!=0) {
@@ -301,10 +343,11 @@ static int upstream_query(unsigned char *inpacket, int psize, unsigned char *ans
 #endif
 
 	unsigned char outpacket[1024];
-	memcpy(outpacket, sinfo_clientMagic, 8);
-	memcpy(outpacket+8, clientPk, 32);
-	memcpy(outpacket+40, nonce, 12);
-	int rc=crypto_box_curve25519xchacha20poly1305_easy_afternm(outpacket+52, inpacket, psize2, nonce, sharedK);
+	unsigned char *outpacketptr=outpacket+UP_PKT_OFF;
+	memcpy(outpacketptr, sinfo_clientMagic, 8);
+	memcpy(outpacketptr+8, clientPk, 32);
+	memcpy(outpacketptr+40, nonce, 12);
+	int rc=crypto_box_curve25519xchacha20poly1305_easy_afternm(outpacketptr+52, inpacket, psize2, nonce, sharedK);
 	//int rc=crypto_box_curve25519xchacha20poly1305_easy(outpacket+52, inpacket, psize2, nonce, sinfo_resolverPk, clientSk);
 	if(rc!=0) { 
 		printf("error during encryption\n");
@@ -312,9 +355,10 @@ static int upstream_query(unsigned char *inpacket, int psize, unsigned char *ans
 	}
 	unsigned char answerCr[1024];
 	int answerCrSz;
-
-	rtrip_upstream(outpacket, 52+16+psize2, answerCr, &answerCrSz);
-
+	if(rtrip_upstream(outpacket, 52+16+psize2, answerCr, &answerCrSz, 1)!=0) {
+		printf("error when communicating to upstream\n");
+		return(1);
+	}
 	if(memcmp(answerCr,"\x72\x36\x66\x6e\x76\x57\x6a\x38",8)!=0) {
 		printf("bad resolver-magic\n");
 		return(1);
@@ -342,11 +386,6 @@ static int upstream_query(unsigned char *inpacket, int psize, unsigned char *ans
 #endif
 	return(0);
 }
-#else /* UPSTREAM_TCP */
-#define PKT_OFF 2
-static int upstream_query(char *inpacket, int psize, char *answer, unsigned int *answersz) {
-}
-#endif
 
 int main(int argc, char **argv) {
 	if(sodium_init()==1) {
@@ -371,7 +410,10 @@ int main(int argc, char **argv) {
 	chdir("/");
 	setuid(DROP_UID);
 	setgid(DROP_GID);
-	printf("Fetching initial upstream certificate from %s://%s:%d... \n", (PKT_OFF==0 ? "udp" : "tcp"), UPSTREAM_HOST, UPSTREAM_PORT);
+	upstreamaddr.sin_family=AF_INET;
+	upstreamaddr.sin_addr.s_addr=inet_addr(UPSTREAM_HOST);
+	upstreamaddr.sin_port=htons(UPSTREAM_PORT);
+	printf("Fetching initial upstream certificate from %s://%s:%d... \n", PROTO, UPSTREAM_HOST, UPSTREAM_PORT);
 	int retry_in=5;
 	a: 
 	retry_in+=retry_in/4;

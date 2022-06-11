@@ -25,7 +25,9 @@
 // Upstream configuration; available presets, or see below to set your custom parameters.
 // See <https://github.com/DNSCrypt/dnscrypt-resolvers/blob/master/v2/public-resolvers.md> for a list of sdns:// adresses
 // and <https://dnscrypt.info/stamps/> to convert the sdns:// stamp into suitable parameters.
+// Prefer UDP transport if your firewall allows it.
 #define UPSTREAM_SCALEWAY_PAR
+//#define UPSTREAM_ACSACSAR_AMS
 
 #ifdef UPSTREAM_ACSACSAR_AMS   // hosted in Amsterdam, run by acsacsar
 #define UPSTREAM_HOST "51.158.166.97"			// host IP as a string
