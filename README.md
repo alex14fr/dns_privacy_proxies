@@ -61,7 +61,7 @@ to clean the cache entries created more than 1 hour ago.
 - RFC8484: DNS queries over HTTPS (DoH) <https://datatracker.ietf.org/doc/html/rfc8484>
 - DNSCrypt protocol specification <https://dnscrypt.info/protocol/>
 - DoT/DoH/DNSCrypt public server list <https://dnscrypt.info/public-servers>
-- DNS stamp calculator <https://dnscrypt.info/stamps>
+- DNS stamp specification <https://dnscrypt.info/stamps-specifications/>
 
 
 
