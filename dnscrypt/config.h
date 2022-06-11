@@ -27,7 +27,7 @@
 // Upstream configuration; available presets in public-resolvers.h, or see below to set your custom parameters.
 // See <https://github.com/DNSCrypt/dnscrypt-resolvers/blob/master/v2/public-resolvers.md> for a list of sdns:// adresses
 // Run `make public-resolvers.h' to get an up-to-date list.
-#define UPSTREAM_P0    // Set UPSTREAM_Pxx (choose xx in public-resolvers.h)
+#define UPSTREAM_P315    // Set UPSTREAM_Px (choose x in public-resolvers.h)
 #include "public-resolvers.h"
 
 // Prefer UDP transport if your firewall allows it, unset if it fails.
