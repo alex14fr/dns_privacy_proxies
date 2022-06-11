@@ -46,6 +46,7 @@ to clean the cache entries created more than 1 hour ago.
 
 ## Installation for DNSCrypt
 
+- Generate the list of public resolvers with make -C dnscrypt public-resolvers.h
 - Edit dnscrypt/config.h file
 - Create the daemon chroot directory and cache databases as for DoTLS/DoHTTPS
 - Compile with make -C dnscrypt
