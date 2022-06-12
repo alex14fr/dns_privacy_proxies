@@ -13,7 +13,7 @@ Simple stub resolvers for DoTLS/DoHTTPS/DNSCrypt upstream servers
 - Cache never expires (by design; you can however use a simple SQLite query to clean up stale cache entries when you want to, and insert fake cache entries to run a filtering server or to add a private zone)
 - Only queries with one question are correctly handled
 - Queries and answers must fit in one datagram
-- Queries are processed sequentially
+- Queries are processed sequentially (except for the multi-threading resolver variant for DNSCrypt)
 - DoH is HTTP/1.1-only
 
 ## Dependencies
@@ -50,7 +50,7 @@ to clean the cache entries created more than 1 hour ago.
 - Edit dnscrypt/config.h file
 - Create the daemon chroot directory and cache databases as for DoTLS/DoHTTPS
 - Compile with make -C dnscrypt
-- Run with dnscrypt/mini_dnscrypt
+- Run with dnscrypt/mini_dnscrypt or dnscrypt/mini_dnscrypt_mt for multi-threading version (recommended)
 - Set 127.0.0.1 as nameserver
 - To clean the cache, run the same command as for DoTLS/DoHTTPS.
 

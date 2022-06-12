@@ -17,9 +17,23 @@
 // Root directory for the daemon, must be writable by DROP_UID:DROP_GID
 #define CHROOTPATH "/var/dnstls_proxy"
 
+//Leave CACHE undefined to completely disable the SQLite cache
+#define CACHE
+
 // Path (relative to CHROOTPATH) containing the cache SQLite database
 // See schema.txt for DB schema.
+// Leave empty for in-memory cache
 #define CACHEDB "/cache"
+
+//(MT-version only)
+//Reclaim memory cache from sqlite, if you leave undef memory consumption will be higher at the price of better performance.
+//No effect for in-memory cache.
+#define SQLITE_RELEASE_MEM
+
+//(MT-version oly)
+// Use journal_mode=off and disable synchronous writes. The cache DB may be corrupted after a crash but performance is increased.
+//No effect for in-memory cache.
+#define SQLITE_ASYNC_AND_JOURNAL_OFF
 
 // Keep the hit count on each cache entry, leave undef to save a write to the DB at each request
 //#define CACHEDB_KEEP_HIT_COUNT

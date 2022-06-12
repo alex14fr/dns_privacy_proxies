@@ -83,10 +83,21 @@ static void hexdump(unsigned char *s, int len) {
 	hexdump_pr(s+len-(len%16 == 0 ? 16 : len%16),(len%16 == 0 ? 16 : len%16));
 }
 
+static char db_schema[]="CREATE TABLE doh_cache(question BLOB PRIMARY KEY, answer BLOB, timestamp INTEGER, hit_count INTEGER) WITHOUT ROWID;CREATE INDEX i1 on doh_cache(question);";
 static void cache_init(void) {
 	if(sqlite3_open(CACHEDB, &db)) {
 		printf("error opening database %s : %s\n",CACHEDB,sqlite3_errmsg(db));
 	}
+	if(strcmp(CACHEDB,"")==0) {
+		if(sqlite3_exec(db, db_schema, NULL, NULL, NULL)) {
+			printf("error creating tables in in-memory cache\n");
+		}
+	}
+#ifdef SQLITE_ASYNC_AND_JOURNAL_OFF
+	if(sqlite3_exec(db,"PRAGMA synchronous=0; PRAGMA journal_mode=off",NULL,NULL,NULL)) {
+		printf("error in PRAGMA : %s\n", sqlite3_errmsg(db));
+	}
+#endif
 #define stmt1 "INSERT INTO doh_cache (question,answer,timestamp) VALUES (?,?,unixepoch())"
 #define stmt2 "SELECT answer FROM doh_cache WHERE question=?"
 	if(sqlite3_prepare_v2(db,stmt1,strlen(stmt1),&insertStmt,NULL)) {
