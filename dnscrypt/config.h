@@ -34,7 +34,7 @@
 #define UPSTREAM_UDP
 
 // Timeout in seconds for upstream answer
-#define TIMEOUT_SECS 2
+#define TIMEOUT_SECS 3
 
 // Debug options
 // #define DUMP_RTRIP     // show hexdump of the packets sent and received to/from upstream

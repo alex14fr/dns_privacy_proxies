@@ -33,6 +33,9 @@
 // Preferer DNS over TLS if your network configuration allow TCP connections to port 853.
 #define QUAD9_DOT
 
+// Use session resumption to decrease connection latency, force TLSv1.2.
+#define SESSION_RESUME
+
 // Customized upstream:
 //#define IS_DOH   								// for DNS over HTTPS, leave undefined for DNS over TLS
 //#define UPSTREAM_HOST "54.39.15.77:853"			// host IP:port as a string

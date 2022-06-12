@@ -252,10 +252,13 @@ int main(int argc, char **argv) {
 	chdir("/");
 	setuid(DROP_UID);
 	setgid(DROP_GID);
-	sessionFd=open("tls_session",O_CREAT|O_RDWR,0600);
 	config=tls_config_new();
 	tls_config_set_ca_file(config,CADB); 
+#ifdef SESSION_RESUME
+	sessionFd=open("tls_session",O_CREAT|O_RDWR,0600);
 	tls_config_set_session_fd(config,sessionFd);
+	tls_config_set_protocols(config,TLS_PROTOCOL_TLSv1_2);
+#endif
 	cache_init();
 	while((psize=recvfrom(s,inpacket+PKT_OFF,512-PKT_OFF,0,(struct sockaddr *)&cl_addr,&claddrsz))>0) {
 		puts("Got request :"); hexdump(inpacket+PKT_OFF,psize-PKT_OFF); 
