@@ -100,6 +100,9 @@ static void cache_init(void) {
 	if(sqlite3_open(CACHEDB, &db)) {
 		printf("error opening database %s : %s\n",CACHEDB,sqlite3_errmsg(db));
 	}
+	if(sqlite3_exec(db,"PRAGMA synchronous=0; PRAGMA journal_mode=off",NULL,NULL,NULL)) {
+		printf("error in PRAGMA : %s\n", sqlite3_errmsg(db));
+	}
 #define stmt1 "INSERT INTO doh_cache (question,answer,timestamp) VALUES (?,?,unixepoch())"
 #define stmt2 "SELECT answer FROM doh_cache WHERE question=?"
 	if(sqlite3_prepare_v2(db,stmt1,strlen(stmt1),&insertStmt,NULL)) {
@@ -138,7 +141,7 @@ static void cache_search(unsigned char *inpacket, int psize, unsigned char *answ
 		printf("cache: hit\n");
 #endif
 		*answersz=sqlite3_column_bytes(queryStmt, 0);
-		memcpy(answer,sqlite3_column_blob(queryStmt, 0),*answersz); // MAYBE HERE ??
+		memcpy(answer,sqlite3_column_blob(queryStmt, 0),*answersz); 
 		answer[0]=inpacket[0];
 		answer[1]=inpacket[1];
 #ifdef CACHEDB_KEEP_HIT_COUNT
@@ -159,12 +162,13 @@ static void cache_search(unsigned char *inpacket, int psize, unsigned char *answ
 static void cache_save(unsigned char *inpacket, int psize, unsigned char *answer, int answersz) {
 	if(answersz<=0) { printf("cache_save : won't save null answer\n"); return; }
 	sqlite3_mutex_enter(sqlite3_db_mutex(db));
-	if(sqlite3_bind_blob(insertStmt,1,inpacket+12,psize-12,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 1 : %s\n",sqlite3_errmsg(db)); } 
-	if(sqlite3_bind_blob(insertStmt,2,answer,answersz,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 2 : %s\n",sqlite3_errmsg(db)); } 
+	if(sqlite3_bind_blob(insertStmt,1,inpacket+12,psize-12,SQLITE_STATIC)) { printf("cache_save : error binding param 1 : %s\n",sqlite3_errmsg(db)); } 
+	if(sqlite3_bind_blob(insertStmt,2,answer,answersz,SQLITE_STATIC)) { printf("cache_save : error binding param 2 : %s\n",sqlite3_errmsg(db)); } 
 	int rc=sqlite3_step(insertStmt);
 	if(rc!=SQLITE_DONE) { printf("cache_save : error during sqlite3_step (rc=%d): %s\n", rc, sqlite3_errmsg(db)); }
-	sqlite3_clear_bindings(insertStmt);
 	sqlite3_reset(insertStmt);
+	sqlite3_clear_bindings(insertStmt);
+	sqlite3_db_release_memory(db);
 	sqlite3_mutex_leave(sqlite3_db_mutex(db));
 }
 

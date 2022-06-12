@@ -5,7 +5,7 @@ BINS=mini_dnscrypt sdns_decode
 
 .PHONY: all clean
 
-all: sdns_decode mini_dnscrypt
+all: sdns_decode mini_dnscrypt mini_dnscrypt_mt
 
 mini_dnscrypt: mini_dnscrypt.c config.h
 
