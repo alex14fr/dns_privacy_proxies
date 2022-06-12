@@ -94,17 +94,15 @@ static void hexdump(unsigned char *s, int len) {
 	hexdump_pr(s+len-(len%16 == 0 ? 16 : len%16),(len%16 == 0 ? 16 : len%16));
 }
 
-static char db_schema[]="CREATE TABLE doh_cache(question BLOB PRIMARY KEY, answer BLOB, timestamp INTEGER, hit_count INTEGER) WITHOUT ROWID;CREATE INDEX i1 on doh_cache(question);";
+static char db_schema[]="CREATE TABLE IF NOT EXISTS doh_cache(question BLOB PRIMARY KEY, answer BLOB, timestamp INTEGER, hit_count INTEGER) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS i1 on doh_cache(question);";
 
 #ifdef CACHE
 static void cache_init(void) {
 	if(sqlite3_open(CACHEDB, &db)) {
 		printf("error opening database %s : %s\n",CACHEDB,sqlite3_errmsg(db));
 	}
-	if(strcmp(CACHEDB,"")==0) {
-		if(sqlite3_exec(db, db_schema, NULL, NULL, NULL)) {
-			printf("error creating tables in in-memory cache\n");
-		}
+	if(sqlite3_exec(db, db_schema, NULL, NULL, NULL)) {
+		printf("error creating tables in cache database\n");
 	}
 #ifdef SQLITE_ASYNC_AND_JOURNAL_OFF
 	if(sqlite3_exec(db,"PRAGMA synchronous=0; PRAGMA journal_mode=off",NULL,NULL,NULL)) {
