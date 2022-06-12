@@ -114,6 +114,7 @@ static void cache_init(void) {
 
 static void cache_search(unsigned char *inpacket, int psize, unsigned char *answer, int *answersz) {
 	*answersz=0;
+	sqlite3_mutex_enter(sqlite3_db_mutex(db));
 	if(sqlite3_bind_blob(queryStmt,1,inpacket+12,psize-12,SQLITE_TRANSIENT)) { printf("error binding param : %s\n",sqlite3_errmsg(db)); } 
 	int rc;
 	rc=sqlite3_step(queryStmt);
@@ -122,6 +123,7 @@ static void cache_search(unsigned char *inpacket, int psize, unsigned char *answ
 		printf("cache: miss\n"); 
 #endif
 		sqlite3_reset(queryStmt); 
+		sqlite3_mutex_leave(sqlite3_db_mutex(db));
 		return; 
 	}
 	else if(rc==SQLITE_ROW) {
@@ -142,15 +144,18 @@ static void cache_search(unsigned char *inpacket, int psize, unsigned char *answ
 		printf("error during sqlite3_step : %s\n", sqlite3_errmsg(db));
 	}
 	sqlite3_reset(queryStmt);
+	sqlite3_mutex_leave(sqlite3_db_mutex(db));
 }
 
 static void cache_save(unsigned char *inpacket, int psize, unsigned char *answer, int answersz) {
 	if(answersz<=0) { printf("cache_save : won't save null answer\n"); return; }
+	sqlite3_mutex_enter(sqlite3_db_mutex(db));
 	if(sqlite3_bind_blob(insertStmt,1,inpacket+12,psize-12,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 1 : %s\n",sqlite3_errmsg(db)); } 
 	if(sqlite3_bind_blob(insertStmt,2,answer,answersz,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 2 : %s\n",sqlite3_errmsg(db)); } 
 	int rc=sqlite3_step(insertStmt);
 	if(rc!=SQLITE_DONE) { printf("cache_save : error during sqlite3_step (rc=%d): %s\n", rc, sqlite3_errmsg(db)); }
 	sqlite3_reset(insertStmt);
+	sqlite3_mutex_leave(sqlite3_db_mutex(db));
 }
 
 #define PKT_OFF 0
