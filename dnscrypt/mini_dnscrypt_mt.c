@@ -28,11 +28,9 @@
  * *
  * */
 
+#define CACHE
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifndef UPSTREAM_UDP
-#include <netinet/tcp.h>
-#endif
 #include <arpa/inet.h>
 #include <string.h>
 #include <stdio.h>
@@ -43,16 +41,23 @@
 #include <time.h>
 #include <pthread.h>
 #include <signal.h>
-#include <sqlite3.h>
 #include <sodium.h>
-
 #include "config.h"
+#ifndef UPSTREAM_UDP
+#include <netinet/tcp.h>
+#endif
+#ifdef CACHE
+#include <sqlite3.h>
+#endif
 
+
+#ifdef CACHE
 static sqlite3 *db;
 static sqlite3_stmt *insertStmt;
 static sqlite3_stmt *queryStmt;
 #ifdef CACHEDB_KEEP_HIT_COUNT
 static sqlite3_stmt *incHitStmt;
+#endif
 #endif
 
 struct timeoutarg {
@@ -61,7 +66,7 @@ struct timeoutarg {
 };
 
 static void* timeout(void *arg) {
-	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+//	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	sleep(TIMEOUT_SECS);
 	printf("Timeout\n");
 	close(((struct timeoutarg*)arg)->upstreamsock);
@@ -90,6 +95,7 @@ static void hexdump(unsigned char *s, int len) {
 	hexdump_pr(s+len-(len%16 == 0 ? 16 : len%16),(len%16 == 0 ? 16 : len%16));
 }
 
+#ifdef CACHE
 static void cache_init(void) {
 	if(sqlite3_open(CACHEDB, &db)) {
 		printf("error opening database %s : %s\n",CACHEDB,sqlite3_errmsg(db));
@@ -115,7 +121,7 @@ static void cache_init(void) {
 static void cache_search(unsigned char *inpacket, int psize, unsigned char *answer, int *answersz) {
 	*answersz=0;
 	sqlite3_mutex_enter(sqlite3_db_mutex(db));
-	if(sqlite3_bind_blob(queryStmt,1,inpacket+12,psize-12,SQLITE_TRANSIENT)) { printf("error binding param : %s\n",sqlite3_errmsg(db)); } 
+	if(sqlite3_bind_blob(queryStmt,1,inpacket+12,psize-12,SQLITE_STATIC)) { printf("error binding param : %s\n",sqlite3_errmsg(db)); } 
 	int rc;
 	rc=sqlite3_step(queryStmt);
 	if(rc==SQLITE_DONE) { 
@@ -123,6 +129,7 @@ static void cache_search(unsigned char *inpacket, int psize, unsigned char *answ
 		printf("cache: miss\n"); 
 #endif
 		sqlite3_reset(queryStmt); 
+		sqlite3_clear_bindings(queryStmt);
 		sqlite3_mutex_leave(sqlite3_db_mutex(db));
 		return; 
 	}
@@ -131,19 +138,21 @@ static void cache_search(unsigned char *inpacket, int psize, unsigned char *answ
 		printf("cache: hit\n");
 #endif
 		*answersz=sqlite3_column_bytes(queryStmt, 0);
-		memcpy(answer,sqlite3_column_blob(queryStmt, 0),*answersz);
+		memcpy(answer,sqlite3_column_blob(queryStmt, 0),*answersz); // MAYBE HERE ??
 		answer[0]=inpacket[0];
 		answer[1]=inpacket[1];
 #ifdef CACHEDB_KEEP_HIT_COUNT
-		if(sqlite3_bind_blob(incHitStmt, 1, inpacket+12, psize-12, SQLITE_TRANSIENT)) { printf("cache_search : error binding param : %s\n",sqlite3_errmsg(db)); }
+		if(sqlite3_bind_blob(incHitStmt, 1, inpacket+12, psize-12, SQLITE_STATIC)) { printf("cache_search : error binding param : %s\n",sqlite3_errmsg(db)); }
 		rc=sqlite3_step(incHitStmt);
 		if(rc!=SQLITE_DONE) { printf("cache_search : error during sqlite3_step (rc=%d) : %s\n", rc, sqlite3_errmsg(db)); }
 		sqlite3_reset(incHitStmt);
+		sqlite3_clear_bindings(incHitStmt);
 #endif
 	} else {
 		printf("error during sqlite3_step : %s\n", sqlite3_errmsg(db));
 	}
 	sqlite3_reset(queryStmt);
+	sqlite3_clear_bindings(queryStmt);
 	sqlite3_mutex_leave(sqlite3_db_mutex(db));
 }
 
@@ -154,9 +163,13 @@ static void cache_save(unsigned char *inpacket, int psize, unsigned char *answer
 	if(sqlite3_bind_blob(insertStmt,2,answer,answersz,SQLITE_TRANSIENT)) { printf("cache_save : error binding param 2 : %s\n",sqlite3_errmsg(db)); } 
 	int rc=sqlite3_step(insertStmt);
 	if(rc!=SQLITE_DONE) { printf("cache_save : error during sqlite3_step (rc=%d): %s\n", rc, sqlite3_errmsg(db)); }
+	sqlite3_clear_bindings(insertStmt);
 	sqlite3_reset(insertStmt);
 	sqlite3_mutex_leave(sqlite3_db_mutex(db));
 }
+
+#endif /* CACHE */
+
 
 #define PKT_OFF 0
 
@@ -173,7 +186,6 @@ static void cache_save(unsigned char *inpacket, int psize, unsigned char *answer
 
 static struct sockaddr_in upstreamaddr;
 static socklen_t claddrsz=sizeof(struct sockaddr_in);
-static socklen_t ignored;
 static uint32_t sinfo_tsend;
 static pthread_mutex_t sinfo_mutex=PTHREAD_MUTEX_INITIALIZER;
 static unsigned char sinfo_clientMagic[8];
@@ -201,12 +213,13 @@ static int rtrip_upstream(unsigned char *in, int insize, unsigned char *out, int
 #ifdef DUMP_RTRIP
 	printf("Sending :\n"); hexdump(in, insize);
 #endif
-	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+	//pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	pthread_t timer_thr;
 	struct timeoutarg arg;
 	arg.tid=pthread_self();
 	arg.upstreamsock=upstreamsock;
 	pthread_create(&timer_thr,NULL,timeout,(void*)&arg);
+	pthread_detach(timer_thr);
 	if((rc=connect(upstreamsock, (struct sockaddr*)&upstreamaddr, sizeof(struct sockaddr_in)))<0) {
 		perror("connect");
 		pthread_cancel(timer_thr);
@@ -242,7 +255,6 @@ static int rtrip_upstream(unsigned char *in, int insize, unsigned char *out, int
 }
 
 static int get_sinfo(void) {
-	int sinfo_ts;
 	unsigned char sinfoBuf[512];
 	unsigned char *sinfo;
 	unsigned char *sinfo_clientMagic_;
@@ -332,8 +344,6 @@ static int get_sinfo(void) {
 #ifdef DUMP_KEYS
 	printf("Shared key : \n"); hexdump(sharedK_,32);
 #endif
-
-	sinfo_ts=now;
 
 	pthread_mutex_lock(&sinfo_mutex);
 	memcpy(sinfo_clientMagic,sinfo_clientMagic_,8);
@@ -450,23 +460,20 @@ void *handle_query(void *arg) {
 #ifdef DUMP_LOCAL
 	puts("Got request :"); hexdump(argg.inpacket+PKT_OFF,argg.psize-PKT_OFF); 
 #endif
+#ifdef CACHE
 	cache_search(argg.inpacket+PKT_OFF,argg.psize-PKT_OFF,answer,&answersz);
-#ifdef DUMP_LOCAL
-		puts("Response :"); hexdump(answer,answersz);
 #endif
 	if(answersz==0) {
 		if(upstream_query(argg.inpacket, argg.psize, answer, &answersz,argg.sharedK,argg.clientPk,argg.clientMagic)==1) {
 			printf("upstream_query failed\n");
-			return(NULL);
-		} 
-		sendto(argg.s, answer, answersz, 0, (struct sockaddr*)(&(argg.cl_addr)), claddrsz);
-		cache_save(argg.inpacket+PKT_OFF, argg.psize-PKT_OFF, answer+PKT_OFF, answersz-PKT_OFF);
+		} else {
+			sendto(argg.s, answer, answersz, 0, (struct sockaddr*)(&(argg.cl_addr)), claddrsz);
+#ifdef CACHE
+			cache_save(argg.inpacket+PKT_OFF, argg.psize-PKT_OFF, answer+PKT_OFF, answersz-PKT_OFF);
+#endif
+		}
 	} else {
 		sendto(argg.s, answer, answersz, 0, (struct sockaddr*)(&(argg.cl_addr)), claddrsz);
-	}
-	if(PKT_OFF != 0) { 
-		printf("shouldn't happen\n"); 
-		exit(100); 
 	}
 	pthread_cleanup_pop(1);
 	return(NULL);
@@ -478,14 +485,13 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
-	struct handlequeryarg arg;
 	struct handlequeryarg* arg_thr;
-	arg.s=socket(AF_INET,SOCK_DGRAM,0);
+	int s=socket(AF_INET,SOCK_DGRAM,0);
 	struct sockaddr_in addr;
 	addr.sin_family=AF_INET;
 	addr.sin_addr.s_addr=htonl(LISTEN_ADDR);
 	addr.sin_port=htons(LOCAL_PORT);
-	if(bind(arg.s,(struct sockaddr *)&addr,sizeof(struct sockaddr_in))<0) { perror("bind"); exit(1); }
+	if(bind(s,(struct sockaddr *)&addr,sizeof(struct sockaddr_in))<0) { perror("bind"); exit(1); }
 	chroot(CHROOTPATH);
 	chdir("/");
 	setuid(DROP_UID);
@@ -495,11 +501,22 @@ int main(int argc, char **argv) {
 	upstreamaddr.sin_port=htons(UPSTREAM_PORT);
 	pthread_t update_thr;
 	pthread_create(&update_thr,NULL,update_sinfo_thr,NULL);
+	pthread_detach(update_thr);
+#ifdef CACHE
 	cache_init();
+#endif
 	printf("Listening for requests on udp://%s:%d...\n", inet_ntoa(addr.sin_addr), LOCAL_PORT);
-	while((arg.psize=recvfrom(arg.s,arg.inpacket+PKT_OFF,512-PKT_OFF,0,(struct sockaddr*)&(arg.cl_addr),&ignored))>0) {
+	char inpacket[512];
+	struct sockaddr_in cl_addr;
+	ssize_t psize;
+	while(1) {
+		psize=recvfrom(s,inpacket+PKT_OFF,512-PKT_OFF,0,(struct sockaddr*)&cl_addr,&claddrsz);
+		if(psize<0) { perror("recvfrom"); exit(1); }
 		arg_thr=malloc(sizeof(struct handlequeryarg));
-		memcpy(arg_thr, &arg, sizeof(struct handlequeryarg));
+		arg_thr->s=s;
+		memcpy(arg_thr->inpacket,inpacket,512);
+		arg_thr->psize=psize;
+		memcpy(&arg_thr->cl_addr,&cl_addr,sizeof(struct sockaddr_in));
 		pthread_mutex_lock(&sinfo_mutex);
 		memcpy(arg_thr->sharedK, sharedK, 32);
 		memcpy(arg_thr->clientPk, clientPk, 32);
@@ -507,7 +524,7 @@ int main(int argc, char **argv) {
 		pthread_mutex_unlock(&sinfo_mutex);
 		pthread_t thr;
 		pthread_create(&thr, NULL, handle_query, arg_thr);
+		pthread_detach(thr);
 		//pthread_join(thr, NULL);
 	}
-	perror("recvfrom");
 }
