@@ -1,0 +1,5 @@
+#PRAGMA journal_mode=WAL;
+CREATE TABLE doh_cache(question BLOB PRIMARY KEY, answer BLOB, timestamp INTEGER, hit_count INTEGER) WITHOUT ROWID;
+CREATE INDEX i1 on doh_cache (question);
+#CREATE INDEX i2 on doh_cache (timestamp);
+
