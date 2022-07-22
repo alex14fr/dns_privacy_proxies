@@ -250,8 +250,8 @@ int main(int argc, char **argv) {
 	if(bind(s,(struct sockaddr *)&addr,sizeof(struct sockaddr_in))<0) { perror("bind"); exit(1); }
 	chroot(CHROOTPATH);
 	chdir("/");
-	setuid(DROP_UID);
-	setgid(DROP_GID);
+	seteuid(DROP_UID);
+	setegid(DROP_GID);
 	config=tls_config_new();
 	tls_config_set_ca_file(config,CADB); 
 #ifdef SESSION_RESUME
