@@ -32,7 +32,6 @@ umask 077
 mkdir /var/dnstls_proxy
 chown nobody:nobody /var/dnstls_proxy
 cp /etc/ssl/cert.pem /var/dnstls_proxy/
-cat schema.txt | sqlite3 /var/dnstls_proxy/cache
 chown nobody:nobody /var/dnstls_proxy/*
 ```
 - Compile with make -C doth
