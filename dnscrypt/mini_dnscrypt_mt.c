@@ -504,7 +504,7 @@ int main(int argc, char **argv) {
 	addr.sin_addr.s_addr=htonl(LISTEN_ADDR);
 	addr.sin_port=htons(LOCAL_PORT);
 	if(bind(s,(struct sockaddr *)&addr,sizeof(struct sockaddr_in))<0) { perror("bind"); exit(1); }
-	chroot(CHROOTPATH);
+	if(chroot(CHROOTPATH)<0) { perror("chroot"); exit(1); }
 	chdir("/");
 	if(setuid(DROP_UID)<0) { perror("setuid"); exit(1); }
 	if(setgid(DROP_GID)<0) { perror("setgid"), exit(1); }
