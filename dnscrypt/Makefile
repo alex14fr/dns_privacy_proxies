@@ -10,7 +10,7 @@ all: sdns_decode mini_dnscrypt mini_dnscrypt_mt
 mini_dnscrypt: mini_dnscrypt.c config.h
 
 public-resolvers.md:
-	curl -o public-resolvers.md https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v2/public-resolvers.md
+	curl -o public-resolvers.md https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md
 
 public-resolvers.h: sdns_decode public-resolvers.md
 	./sdns_decode < public-resolvers.md > public-resolvers.h

@@ -17,7 +17,7 @@
 
 // Path (relative to CHROOTPATH) containing the cache SQLite database
 // See schema.txt for DB schema.
-#define CACHEDB "/cache"
+#define CACHEDB ""
 
 // Keep the hit count on each cache entry, leave undef to save a write to the DB at each request
 //#define CACHEDB_KEEP_HIT_COUNT

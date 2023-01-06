@@ -23,7 +23,7 @@
 // Path (relative to CHROOTPATH) containing the cache SQLite database
 // See schema.txt for DB schema.
 // Leave empty for in-memory cache
-#define CACHEDB "/cache"
+#define CACHEDB ""
 
 //(MT-version only)
 //Reclaim memory cache from sqlite, if you leave undef memory consumption will be higher at the price of better performance.
@@ -42,7 +42,7 @@
 // See <https://github.com/DNSCrypt/dnscrypt-resolvers/blob/master/v2/public-resolvers.md> for a list of sdns:// adresses
 // Run `make public-resolvers.h' to get an up-to-date list.
 //#define UPSTREAM_P315    // Set UPSTREAM_Px (choose x in public-resolvers.h)
-#define UPSTREAM_P0    // Set UPSTREAM_Px (choose x in public-resolvers.h)
+#define UPSTREAM_P174    // Set UPSTREAM_Px (choose x in public-resolvers.h)
 #include "public-resolvers.h"
 
 // Prefer UDP transport if your firewall allows it, unset if it fails.

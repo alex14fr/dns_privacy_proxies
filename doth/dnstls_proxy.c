@@ -131,9 +131,13 @@ static void tlsconnect(void) {
 	if(tls_conn_session_resumed(ctx)==1) { printf("TLS session resumed\n"); }
 }
 
+static char db_schema[]="CREATE TABLE IF NOT EXISTS doh_cache(question BLOB PRIMARY KEY, answer BLOB, timestamp INTEGER, hit_count INTEGER) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS i1 on doh_cache(question);";
 static void cache_init(void) {
 	if(sqlite3_open(CACHEDB, &db)) {
 		printf("error opening database %s : %s\n",CACHEDB,sqlite3_errmsg(db));
+	}
+	if(sqlite3_exec(db, db_schema, NULL, NULL, NULL)) {
+		printf("error creating tables in cache database\n");
 	}
 #define stmt1 "INSERT INTO doh_cache (question,answer,timestamp) VALUES (?,?,unixepoch())"
 #define stmt2 "SELECT answer FROM doh_cache WHERE question=?"
